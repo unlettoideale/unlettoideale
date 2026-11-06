@@ -83,3 +83,107 @@
     });
   }
 })();
+
+/* ---------- Animation layer ---------- */
+(function () {
+  var reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  var coarse = window.matchMedia && window.matchMedia("(pointer: coarse)").matches;
+
+  // Split headline into words for the mask reveal
+  document.querySelectorAll(".split-words").forEach(function (h) {
+    var i = 0;
+    (function walk(node, parent) {
+      Array.prototype.slice.call(node.childNodes).forEach(function (n) {
+        if (n.nodeType === 3) {
+          var frag = document.createDocumentFragment();
+          n.textContent.split(/(\s+)/).forEach(function (part) {
+            if (!part) return;
+            if (/^\s+$/.test(part)) { frag.appendChild(document.createTextNode(" ")); return; }
+            var w = document.createElement("span"); w.className = "w";
+            var s = document.createElement("span"); s.style.setProperty("--i", i++); s.textContent = part;
+            w.appendChild(s); frag.appendChild(w);
+          });
+          n.parentNode.replaceChild(frag, n);
+        } else if (n.nodeType === 1) { walk(n); }
+      });
+    })(h);
+  });
+
+  // Scroll progress + hide header on scroll down
+  var bar = document.querySelector(".progress");
+  var header = document.querySelector(".site-header");
+  var lastY = 0, ticking = false;
+  function onScroll() {
+    var y = window.scrollY, max = document.documentElement.scrollHeight - window.innerHeight;
+    if (bar) bar.style.setProperty("--p", max > 0 ? Math.min(y / max, 1) : 0);
+    if (header) {
+      var menuOpen = document.getElementById("menu") && document.getElementById("menu").classList.contains("open");
+      header.classList.toggle("hide", y > lastY && y > 240 && !menuOpen);
+    }
+    lastY = y; ticking = false;
+  }
+  window.addEventListener("scroll", function () { if (!ticking) { ticking = true; requestAnimationFrame(onScroll); } }, { passive: true });
+  onScroll();
+
+  if (reduce) return;
+
+  // Hero: cursor glow + parallax
+  var hero = document.querySelector(".hero");
+  if (hero && !coarse) {
+    var shape = hero.querySelector(".hero-shape");
+    hero.addEventListener("mousemove", function (e) {
+      var r = hero.getBoundingClientRect();
+      var x = (e.clientX - r.left) / r.width, y = (e.clientY - r.top) / r.height;
+      hero.style.setProperty("--mx", (x * 100) + "%");
+      hero.style.setProperty("--my", (y * 100) + "%");
+      if (shape) shape.style.rotate = (-6 + (x - .5) * 8) + "deg";
+    });
+  }
+
+  if (coarse) return;
+
+  // Cards: spotlight + tilt
+  document.addEventListener("mousemove", function (e) {
+    var el = e.target.closest && e.target.closest(".card, .member");
+    if (!el) return;
+    var r = el.getBoundingClientRect();
+    var x = e.clientX - r.left, y = e.clientY - r.top;
+    el.style.setProperty("--cx", x + "px");
+    el.style.setProperty("--cy", y + "px");
+    var rx = ((y / r.height) - .5) * -6, ry = ((x / r.width) - .5) * 6;
+    el.style.transform = "perspective(800px) rotateX(" + rx + "deg) rotateY(" + ry + "deg) translateY(-6px)";
+  });
+  document.addEventListener("mouseout", function (e) {
+    var el = e.target.closest && e.target.closest(".card, .member");
+    if (el && !el.contains(e.relatedTarget)) el.style.transform = "";
+  });
+
+  // Magnetic buttons
+  document.querySelectorAll(".btn").forEach(function (b) {
+    b.addEventListener("mousemove", function (e) {
+      var r = b.getBoundingClientRect();
+      b.style.translate = ((e.clientX - r.left - r.width / 2) * .15) + "px " + ((e.clientY - r.top - r.height / 2) * .25) + "px";
+    });
+    b.addEventListener("mouseleave", function () { b.style.translate = ""; });
+  });
+})();
+
+/* ---------- Single-file preview router (only when body[data-spa]) ---------- */
+(function () {
+  if (!document.body.hasAttribute("data-spa")) return;
+  var pages = {};
+  document.querySelectorAll("[data-page]").forEach(function (p) { pages[p.getAttribute("data-page")] = p; });
+  var titles = { home: "ANGPI — La rete nazionale dei giovani Periti Industriali", "chi-siamo": "Chi siamo — ANGPI", eventi: "Eventi — ANGPI", contatti: "Contatti — ANGPI", iscriviti: "Iscriviti — ANGPI" };
+  function route() {
+    var h = (location.hash || "#home").slice(1);
+    if (!pages[h]) { if (location.hash) return; h = "home"; }
+    Object.keys(pages).forEach(function (k) { pages[k].classList.toggle("active", k === h); });
+    document.querySelectorAll("#menu a").forEach(function (a) {
+      if (a.getAttribute("href") === "#" + h) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
+    });
+    document.title = titles[h];
+    window.scrollTo(0, 0);
+  }
+  window.addEventListener("hashchange", route);
+  route();
+})();
